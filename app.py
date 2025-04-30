@@ -29,35 +29,63 @@ with st.expander("View Pre-configured Battery Models"):
 st.subheader("Custom Configuration")
 st.write("Enter your desired battery specifications:")
 
-col1, col2 = st.columns(2)
+# First let user select voltage
+voltage_options = sorted(battery_df['voltage'].unique())
+voltage_input = st.selectbox(
+    "Voltage Rating", 
+    options=voltage_options,
+    help="Select the voltage rating for your battery cabinet"
+)
+
+# Filter models by selected voltage
+filtered_df = battery_df[battery_df['voltage'] == voltage_input]
+
+# Create 3 columns for the inputs
+col1, col2, col3 = st.columns(3)
 
 with col1:
     # User inputs for custom configuration
-    kw_input = st.number_input("Power (kW)", 
-                               min_value=float(battery_df['kW'].min()), 
-                               max_value=float(battery_df['kW'].max()),
-                               step=0.1,
-                               help="Enter the desired power in kilowatts (kW)")
-
-    kwh_input = st.number_input("Energy (kWh)", 
-                                min_value=float(battery_df['kWh'].min()), 
-                                max_value=float(battery_df['kWh'].max()),
-                                step=0.1,
-                                help="Enter the desired energy capacity in kilowatt-hours (kWh)")
+    kw_input = st.number_input(
+        "Power (kW)", 
+        min_value=float(filtered_df['kW'].min()), 
+        max_value=float(filtered_df['kW'].max()),
+        value=float(filtered_df['kW'].min()),
+        step=5.0,
+        help="Enter the desired power in kilowatts (kW)"
+    )
 
 with col2:
+    kwh_input = st.number_input(
+        "Energy (kWh)", 
+        min_value=float(filtered_df['kWh'].min()), 
+        max_value=float(filtered_df['kWh'].max()),
+        value=float(filtered_df['kWh'].min()),
+        step=10.0,
+        help="Enter the desired energy capacity in kilowatt-hours (kWh)"
+    )
+
+with col3:
     # Calculate backup hours but allow user to override
     if kw_input > 0:
         calculated_hours = kwh_input / kw_input
     else:
         calculated_hours = 0
         
-    hours_input = st.number_input("Backup Hours", 
-                                  min_value=float(battery_df['backup_hours'].min()), 
-                                  max_value=float(battery_df['backup_hours'].max()),
-                                  value=float(calculated_hours),
-                                  step=0.1,
-                                  help="Enter the desired backup duration in hours")
+    hours_min = float(filtered_df['backup_hours'].min())
+    hours_max = float(filtered_df['backup_hours'].max())
+    
+    # Make sure calculated_hours is within range, otherwise set to min
+    if not (hours_min <= calculated_hours <= hours_max):
+        calculated_hours = hours_min
+        
+    hours_input = st.number_input(
+        "Backup Hours", 
+        min_value=hours_min, 
+        max_value=hours_max,
+        value=calculated_hours,
+        step=0.1,
+        help="Enter the desired backup duration in hours"
+    )
     
     # Show automatically calculated backup hours
     st.write(f"Calculated backup hours: {calculated_hours:.2f} hours")
@@ -70,9 +98,9 @@ if st.button("Calculate Price"):
             st.error("All values must be greater than zero.")
         else:
             # Check if inputs are within the range of pre-configured models
-            kw_min, kw_max = battery_df['kW'].min(), battery_df['kW'].max()
-            kwh_min, kwh_max = battery_df['kWh'].min(), battery_df['kWh'].max()
-            hours_min, hours_max = battery_df['backup_hours'].min(), battery_df['backup_hours'].max()
+            kw_min, kw_max = filtered_df['kW'].min(), filtered_df['kW'].max()
+            kwh_min, kwh_max = filtered_df['kWh'].min(), filtered_df['kWh'].max()
+            hours_min, hours_max = filtered_df['backup_hours'].min(), filtered_df['backup_hours'].max()
             
             if not (kw_min <= kw_input <= kw_max):
                 st.warning(f"Power (kW) input is outside the range of pre-configured models ({kw_min} - {kw_max}). Extrapolation may be less accurate.")
@@ -86,6 +114,7 @@ if st.button("Calculate Price"):
             # Perform interpolation
             estimated_price = interpolate_price(
                 battery_df, 
+                voltage_input,
                 kw_input, 
                 kwh_input, 
                 hours_input
@@ -97,6 +126,7 @@ if st.button("Calculate Price"):
             # Show custom configuration details
             st.subheader("Custom Configuration Details")
             custom_config = pd.DataFrame({
+                'voltage': [voltage_input],
                 'kW': [kw_input],
                 'kWh': [kwh_input],
                 'backup_hours': [hours_input],
@@ -115,6 +145,7 @@ This calculator uses interpolation to estimate prices for custom battery cabinet
 **How it works:**
 1. We store data for pre-configured battery models with known prices
 2. When you input custom specifications, the algorithm:
+   - First filters by voltage rating
    - Finds similar pre-configured models
    - Calculates the price based on the relative position of your configuration
    - Considers multiple dimensions (kW, kWh, backup hours)

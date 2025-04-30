@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 
-def interpolate_price(battery_df, kw, kwh, hours):
+def interpolate_price(battery_df, voltage, kw, kwh, hours):
     """
     Calculate the estimated price for a custom battery configuration using
     interpolation based on known pre-configured models.
@@ -10,7 +10,9 @@ def interpolate_price(battery_df, kw, kwh, hours):
     -----------
     battery_df : pandas.DataFrame
         DataFrame containing pre-configured battery models with columns:
-        'kW', 'kWh', 'backup_hours', and 'price'
+        'voltage', 'kW', 'kWh', 'backup_hours', and 'price'
+    voltage : float
+        Voltage rating for the custom configuration (208V or 480V)
     kw : float
         Power in kilowatts (kW) for the custom configuration
     kwh : float
@@ -23,9 +25,16 @@ def interpolate_price(battery_df, kw, kwh, hours):
     float
         Estimated price for the custom battery configuration
     """
+    # First filter by voltage to ensure we're only comparing within the same voltage class
+    filtered_df = battery_df[battery_df['voltage'] == voltage]
+    
+    # If no models match the voltage, return None or raise an error
+    if filtered_df.empty:
+        raise ValueError(f"No pre-configured models found for voltage {voltage}V")
+    
     # Extract the feature points (kW, kWh, backup_hours) and target values (price)
-    points = battery_df[['kW', 'kWh', 'backup_hours']].values
-    prices = battery_df['price'].values
+    points = filtered_df[['kW', 'kWh', 'backup_hours']].values
+    prices = filtered_df['price'].values
     
     # Create the interpolator
     # First try linear interpolation
