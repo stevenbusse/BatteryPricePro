@@ -155,6 +155,13 @@ if st.button("Calculate Price"):
                 
                 # Display number of modules needed
                 st.write(f"**Modules Needed:** {price_estimates['modules_needed']}")
+                
+                # Show interpolation models if available
+                if price_estimates.get('lower_price', 0) > 0:
+                    st.write(f"**Lower Model Price:** ${price_estimates['lower_price']:,.2f}")
+                
+                if price_estimates.get('upper_price', 0) > 0:
+                    st.write(f"**Upper Model Price:** ${price_estimates['upper_price']:,.2f}")
             
             with price_col2:
                 # Display the tariff amount
@@ -173,6 +180,10 @@ if st.button("Calculate Price"):
                     # Calculate and display the price per module with tariff
                     price_per_module_with_tariff = price_estimates['with_tariff'] / price_estimates['modules_needed']
                     st.write(f"**Price per Module (with tariff):** ${price_per_module_with_tariff:,.2f}")
+                    
+                    # Show details about the calculation method
+                    if 'interpolation_method' in price_estimates:
+                        st.write(f"**Calculation Method:** Module-based interpolation")
             
             # Show custom configuration details
             st.subheader("Custom Configuration Details")
@@ -215,4 +226,8 @@ your configuration requires, and interpolates the price per module from similar 
 **About Tariffs:**
 Tariffs are additional costs applied to battery imports. The calculator applies the specified tariff 
 percentage to the base price to determine the tariff amount and total price.
+
+**Local Access:**
+This tool can be shared with team members by running it on a host computer and allowing 
+other computers to access it over the local network.
 """)
