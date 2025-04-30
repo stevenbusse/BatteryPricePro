@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, module_size=10.24):
+def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, module_size=10.24, tariff_percentage=64.5):
     """
     Calculate the estimated price for a custom battery configuration using
     a module-based approach. The price is calculated based on finding models 
@@ -25,6 +25,8 @@ def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, 
         Whether to include tariff in the price calculation
     module_size : float, default=10.24
         The energy capacity (kWh) of a single battery module
+    tariff_percentage : float, default=64.5
+        The percentage to apply as tariff on the base price
         
     Returns:
     --------
@@ -67,26 +69,36 @@ def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, 
     # Use integer ceiling (round up) to ensure enough modules
     modules_needed = int(np.ceil(kwh / module_size))
     
+    # Create a copy of the dataframe to avoid SettingWithCopyWarning
+    models_df = models_by_kw.copy()
+    
     # Calculate the estimated price based on module count
     # 1. Calculate price per module for each model
-    models_by_kw['modules'] = np.ceil(models_by_kw['kWh'] / module_size)
-    models_by_kw['price_with_tariff_per_module'] = models_by_kw['price_with_tariff'] / models_by_kw['modules']
-    models_by_kw['price_without_tariff_per_module'] = models_by_kw['price_without_tariff'] / models_by_kw['modules']
+    models_df.loc[:, 'modules'] = np.ceil(models_df['kWh'] / module_size)
+    models_df.loc[:, 'price_without_tariff_per_module'] = models_df['price_without_tariff'] / models_df['modules']
     
-    # 2. Calculate average price per module
-    avg_price_with_tariff_per_module = models_by_kw['price_with_tariff_per_module'].mean()
-    avg_price_without_tariff_per_module = models_by_kw['price_without_tariff_per_module'].mean()
+    # 2. Calculate average price per module (without tariff)
+    avg_price_without_tariff_per_module = models_df['price_without_tariff_per_module'].mean()
     
-    # 3. Calculate final price based on modules needed
-    with_tariff_estimated = avg_price_with_tariff_per_module * modules_needed
+    # 3. Calculate the base price without tariff
     without_tariff_estimated = avg_price_without_tariff_per_module * modules_needed
+    
+    # 4. Apply the custom tariff percentage to get price with tariff
+    tariff_amount = without_tariff_estimated * (tariff_percentage / 100)
+    with_tariff_estimated = without_tariff_estimated + tariff_amount
     
     # Create result dictionary
     price_estimates = {
         'with_tariff': with_tariff_estimated,
         'without_tariff': without_tariff_estimated,
-        'tariff_only': with_tariff_estimated - without_tariff_estimated,
+        'tariff_only': tariff_amount,
+        'tariff_percentage': tariff_percentage,
         'modules_needed': modules_needed
     }
+    
+    # If tariff should not be included, set the with_tariff price equal to without_tariff
+    if not include_tariff:
+        price_estimates['with_tariff'] = price_estimates['without_tariff']
+        price_estimates['tariff_only'] = 0.0
     
     return price_estimates

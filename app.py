@@ -93,12 +93,22 @@ with col3:
 
 # Module information
 st.subheader("Module Information")
-st.write("Each battery module has a fixed capacity of 10.24 kWh.")
+st.write("Each battery module has a fixed capacity of 10.24 kWh and can support up to 90 kW of power.")
 module_size = 10.24  # Fixed module size
 
-# Add a checkbox for tariff inclusion
+# Tariff Settings
+st.subheader("Tariff Settings")
 include_tariff = st.checkbox("Include tariffs in price calculation", value=True, 
                              help="Uncheck to see prices without tariffs")
+
+tariff_percentage = st.slider(
+    "Tariff Percentage", 
+    min_value=0.0, 
+    max_value=100.0, 
+    value=64.5,  # Default value based on existing data
+    step=0.5,
+    help="Adjust the tariff percentage applied to the base price"
+)
 
 # Calculate price button
 if st.button("Calculate Price"):
@@ -129,7 +139,8 @@ if st.button("Calculate Price"):
                 kwh_input, 
                 hours_input,
                 include_tariff,
-                module_size
+                module_size,
+                tariff_percentage
             )
             
             # Create columns for price display
@@ -151,8 +162,8 @@ if st.button("Calculate Price"):
                 
                 # Show tariff percentage
                 if price_estimates['without_tariff'] > 0:
-                    tariff_percentage = (price_estimates['tariff_only'] / price_estimates['without_tariff']) * 100
-                    st.write(f"Tariff Percentage: {tariff_percentage:.2f}%")
+                    applied_tariff = price_estimates.get('tariff_percentage', 64.5)  # Get from results or use default
+                    st.write(f"Applied Tariff Percentage: {applied_tariff:.2f}%")
                 
                 # Display per-module prices
                 if price_estimates['modules_needed'] > 0:
@@ -172,7 +183,8 @@ if st.button("Calculate Price"):
                 'module_size_kWh': [module_size],
                 'price_with_tariff': [price_estimates['with_tariff']],
                 'price_without_tariff': [price_estimates['without_tariff']],
-                'tariff_amount': [price_estimates['tariff_only']]
+                'tariff_amount': [price_estimates['tariff_only']],
+                'tariff_percentage': [price_estimates.get('tariff_percentage', 64.5)]
             })
             st.dataframe(custom_config)
             
