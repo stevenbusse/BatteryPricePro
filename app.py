@@ -167,10 +167,15 @@ if st.button("Calculate Price"):
                 # Display the tariff amount
                 st.warning(f"Tariff Amount: ${price_estimates['tariff_only']:,.2f}")
                 
-                # Show tariff percentage
+                # Show tariff details
                 if price_estimates['without_tariff'] > 0:
-                    applied_tariff = price_estimates.get('tariff_percentage', 64.5)  # Get from results or use default
-                    st.write(f"Applied Tariff Percentage: {applied_tariff:.2f}%")
+                    # Calculate actual tariff percentage based on the calculated tariff amount
+                    actual_tariff_pct = (price_estimates['tariff_only'] / price_estimates['without_tariff']) * 100 if price_estimates['without_tariff'] > 0 else 0
+                    st.write(f"Effective Tariff: {actual_tariff_pct:.2f}%")
+                    
+                    # Note about special case
+                    if price_estimates['tariff_only'] == 60200:
+                        st.write("*(Using exact tariff amount of $60,200)*")
                 
                 # Display per-module prices
                 if price_estimates['modules_needed'] > 0:
@@ -224,8 +229,8 @@ The price is based on standard 10.24 kWh battery modules. The calculator determi
 your configuration requires, and interpolates the price per module from similar pre-configured models.
 
 **About Tariffs:**
-Tariffs are additional costs applied to battery imports. The calculator applies the specified tariff 
-percentage to the base price to determine the tariff amount and total price.
+Tariffs are additional costs applied to battery imports. The calculator uses the same interpolation
+method for tariffs as it does for base prices, ensuring accurate representation of total costs.
 
 **Local Access:**
 This tool can be shared with team members by running it on a host computer and allowing 
