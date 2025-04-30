@@ -167,10 +167,12 @@ if st.button("Calculate Price"):
                 
                 # Display per-module prices
                 if price_estimates['modules_needed'] > 0:
+                    # Display the interpolated price per module (from the algorithm)
+                    st.write(f"**Base Price per Module:** ${price_estimates.get('price_per_module', 0):,.2f}")
+                    
+                    # Calculate and display the price per module with tariff
                     price_per_module_with_tariff = price_estimates['with_tariff'] / price_estimates['modules_needed']
-                    price_per_module_without_tariff = price_estimates['without_tariff'] / price_estimates['modules_needed']
                     st.write(f"**Price per Module (with tariff):** ${price_per_module_with_tariff:,.2f}")
-                    st.write(f"**Price per Module (without tariff):** ${price_per_module_without_tariff:,.2f}")
             
             # Show custom configuration details
             st.subheader("Custom Configuration Details")
@@ -200,17 +202,17 @@ This calculator estimates prices for custom battery cabinet configurations based
 1. We store data for pre-configured battery models with known prices
 2. When you input custom specifications, the algorithm:
    - First filters by voltage rating
-   - Finds similar pre-configured models with kW ratings above/below your requirements
-   - Calculates the average price per battery module
+   - Finds models with module counts above and below your requirements
+   - Performs interpolation between the closest models to determine the price per module
    - Determines how many 10.24 kWh modules are needed for your energy requirement
-   - Multiplies the number of modules by the average price per module
-   - Calculates prices both with and without tariffs
+   - Calculates the base price by multiplying modules needed by the interpolated price per module
+   - Applies the tariff percentage to calculate the final price with tariff
 
 **Module-Based Calculation:**
 The price is based on standard 10.24 kWh battery modules. The calculator determines how many modules 
-your configuration requires, and multiplies by the average cost per module derived from similar pre-configured models.
+your configuration requires, and interpolates the price per module from similar pre-configured models.
 
 **About Tariffs:**
-Tariffs are additional costs applied to battery imports. The calculator provides pricing 
-both with and without tariffs, allowing you to understand the full cost structure.
+Tariffs are additional costs applied to battery imports. The calculator applies the specified tariff 
+percentage to the base price to determine the tariff amount and total price.
 """)

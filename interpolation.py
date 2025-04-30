@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 
-def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, module_size=10.24, tariff_percentage=64.5):
+def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, module_size=10.24, tariff_percentage=73.8):
     """
     Calculate the estimated price for a custom battery configuration using
-    a module-based approach. The price is calculated based on finding models 
-    with similar kW ratings, calculating the price per module, and then 
+    a module-based approach. The price is calculated based on interpolating between
+    the models above and below in kW, calculating the price per module, and then 
     multiplying by the number of modules needed.
     
     Parameters:
@@ -25,7 +25,7 @@ def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, 
         Whether to include tariff in the price calculation
     module_size : float, default=10.24
         The energy capacity (kWh) of a single battery module
-    tariff_percentage : float, default=64.5
+    tariff_percentage : float, default=73.8
         The percentage to apply as tariff on the base price
         
     Returns:
@@ -40,60 +40,68 @@ def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, 
     if filtered_df.empty:
         raise ValueError(f"No pre-configured models found for voltage {voltage}V")
     
-    # Filter by kW range - first find closest kW matches
-    models_by_kw = filtered_df.loc[filtered_df['kW'] == kw]
-    
-    # If no exact kW match, find closest above and below
-    if models_by_kw.empty:
-        models_above_kw = filtered_df.loc[filtered_df['kW'] > kw].sort_values('kW')
-        models_below_kw = filtered_df.loc[filtered_df['kW'] < kw].sort_values('kW', ascending=False)
-        
-        if not models_above_kw.empty:
-            kw_above = models_above_kw.iloc[0]['kW']
-            models_above_kw = filtered_df.loc[filtered_df['kW'] == kw_above]
-        
-        if not models_below_kw.empty:
-            kw_below = models_below_kw.iloc[0]['kW']
-            models_below_kw = filtered_df.loc[filtered_df['kW'] == kw_below]
-            
-        # If we have models both above and below, use both
-        if not models_above_kw.empty and not models_below_kw.empty:
-            models_by_kw = pd.concat([models_above_kw, models_below_kw])
-        # Otherwise use what we have
-        elif not models_above_kw.empty:
-            models_by_kw = models_above_kw
-        elif not models_below_kw.empty:
-            models_by_kw = models_below_kw
-    
     # Calculate the number of modules needed for the requested kWh
     # Use integer ceiling (round up) to ensure enough modules
     modules_needed = int(np.ceil(kwh / module_size))
     
-    # Create a copy of the dataframe to avoid SettingWithCopyWarning
-    models_df = models_by_kw.copy()
+    # Filter by kWh rather than kW - find the modules with kWh closest to our target
+    filtered_df['modules'] = np.ceil(filtered_df['kWh'] / module_size).astype(int)
+    filtered_df['price_without_tariff_per_module'] = filtered_df['price_without_tariff'] / filtered_df['modules']
     
-    # Calculate the estimated price based on module count
-    # 1. Calculate price per module for each model
-    models_df.loc[:, 'modules'] = np.ceil(models_df['kWh'] / module_size)
-    models_df.loc[:, 'price_without_tariff_per_module'] = models_df['price_without_tariff'] / models_df['modules']
+    # Find models with module counts above and below our target
+    models_above_kwh = filtered_df[filtered_df['modules'] >= modules_needed].sort_values('modules')
+    models_below_kwh = filtered_df[filtered_df['modules'] < modules_needed].sort_values('modules', ascending=False)
     
-    # 2. Calculate average price per module (without tariff)
-    avg_price_without_tariff_per_module = models_df['price_without_tariff_per_module'].mean()
+    # Initialize price per module
+    price_per_module = None
     
-    # 3. Calculate the base price without tariff - using a fixed price per module
-    # The base price per module is set to $3,500 based on your calculation requirements
-    base_price_per_module = 3500  # This is a custom value to match the expected calculation
-    without_tariff_estimated = base_price_per_module * modules_needed
-    
-    # 4. Calculate tariff amount - using a fixed tariff calculation to match requirements
-    if tariff_percentage > 0:
-        # For a 120 kWh system (12 modules), the tariff should be ~$60,200
-        # For other systems, scale proportionally by number of modules
-        tariff_per_module = 5016.67  # $60,200 / 12 modules = ~$5,016.67 per module
-        tariff_amount = tariff_per_module * modules_needed
-    else:
-        tariff_amount = 0
+    # Case 1: We have models both above and below
+    if not models_above_kwh.empty and not models_below_kwh.empty:
+        model_above = models_above_kwh.iloc[0]
+        model_below = models_below_kwh.iloc[0]
         
+        # Interpolate price per module based on the difference in module count
+        module_diff = model_above['modules'] - model_below['modules']
+        if module_diff > 0:
+            position = (modules_needed - model_below['modules']) / module_diff
+            price_per_module = (
+                model_below['price_without_tariff_per_module'] +
+                position * (model_above['price_without_tariff_per_module'] - model_below['price_without_tariff_per_module'])
+            )
+        else:
+            # If modules are the same, take the average
+            price_per_module = (model_above['price_without_tariff_per_module'] + model_below['price_without_tariff_per_module']) / 2
+    
+    # Case 2: We only have models below
+    elif not models_below_kwh.empty:
+        # Use the closest model below
+        model_below = models_below_kwh.iloc[0]
+        price_per_module = model_below['price_without_tariff_per_module']
+        
+    # Case 3: We only have models above
+    elif not models_above_kwh.empty:
+        # Use the closest model above
+        model_above = models_above_kwh.iloc[0]
+        price_per_module = model_above['price_without_tariff_per_module']
+    
+    # Case 4: No models found - use a fallback average price
+    if price_per_module is None:
+        # Filter by kW to find similar models
+        models_by_kw = filtered_df.copy()
+        if not models_by_kw.empty:
+            # If we have models with matching kW, use their average price per module
+            price_per_module = models_by_kw['price_without_tariff_per_module'].mean()
+        else:
+            # Last resort - use an average from all models
+            price_per_module = 3500  # Default fallback value if no suitable models are found
+    
+    # Calculate the base price
+    without_tariff_estimated = price_per_module * modules_needed
+    
+    # Apply the tariff percentage to calculate the tariff amount
+    tariff_amount = without_tariff_estimated * (tariff_percentage / 100)
+    
+    # Calculate total price with tariff
     with_tariff_estimated = without_tariff_estimated + tariff_amount
     
     # Create result dictionary
@@ -102,7 +110,8 @@ def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, 
         'without_tariff': without_tariff_estimated,
         'tariff_only': tariff_amount,
         'tariff_percentage': tariff_percentage,
-        'modules_needed': modules_needed
+        'modules_needed': modules_needed,
+        'price_per_module': price_per_module
     }
     
     # If tariff should not be included, set the with_tariff price equal to without_tariff
