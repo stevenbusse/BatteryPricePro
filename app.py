@@ -14,8 +14,9 @@ st.set_page_config(
 # Application title and introduction
 st.title("Battery Cabinet Pricing Calculator")
 st.write("""
-This tool calculates the price of custom battery cabinet configurations by interpolating 
-between pre-configured models. Enter your desired specifications below.
+This tool calculates the price of custom battery cabinet configurations based on 
+pre-configured models and the number of battery modules required. Enter your 
+desired specifications below.
 """)
 
 # Get pre-configured battery data
@@ -90,6 +91,11 @@ with col3:
     # Show automatically calculated backup hours
     st.write(f"Calculated backup hours: {calculated_hours:.2f} hours")
 
+# Module information
+st.subheader("Module Information")
+st.write("Each battery module has a fixed capacity of 10.24 kWh.")
+module_size = 10.24  # Fixed module size
+
 # Add a checkbox for tariff inclusion
 include_tariff = st.checkbox("Include tariffs in price calculation", value=True, 
                              help="Uncheck to see prices without tariffs")
@@ -98,7 +104,7 @@ include_tariff = st.checkbox("Include tariffs in price calculation", value=True,
 if st.button("Calculate Price"):
     try:
         # Validate inputs
-        if kw_input <= 0 or kwh_input <= 0 or hours_input <= 0:
+        if kw_input <= 0 or kwh_input <= 0 or hours_input <= 0 or module_size <= 0:
             st.error("All values must be greater than zero.")
         else:
             # Check if inputs are within the range of pre-configured models
@@ -115,14 +121,15 @@ if st.button("Calculate Price"):
             if not (hours_min <= hours_input <= hours_max):
                 st.warning(f"Backup hours input is outside the range of pre-configured models ({hours_min} - {hours_max}). Extrapolation may be less accurate.")
             
-            # Perform interpolation
+            # Perform interpolation using module-based pricing
             price_estimates = interpolate_price(
                 battery_df, 
                 voltage_input,
                 kw_input, 
                 kwh_input, 
                 hours_input,
-                include_tariff
+                include_tariff,
+                module_size
             )
             
             # Create columns for price display
@@ -134,6 +141,9 @@ if st.button("Calculate Price"):
                 
                 # Display the result without tariff
                 st.info(f"Price without Tariff: ${price_estimates['without_tariff']:,.2f}")
+                
+                # Display number of modules needed
+                st.write(f"**Modules Needed:** {price_estimates['modules_needed']}")
             
             with price_col2:
                 # Display the tariff amount
@@ -143,6 +153,13 @@ if st.button("Calculate Price"):
                 if price_estimates['without_tariff'] > 0:
                     tariff_percentage = (price_estimates['tariff_only'] / price_estimates['without_tariff']) * 100
                     st.write(f"Tariff Percentage: {tariff_percentage:.2f}%")
+                
+                # Display per-module prices
+                if price_estimates['modules_needed'] > 0:
+                    price_per_module_with_tariff = price_estimates['with_tariff'] / price_estimates['modules_needed']
+                    price_per_module_without_tariff = price_estimates['without_tariff'] / price_estimates['modules_needed']
+                    st.write(f"**Price per Module (with tariff):** ${price_per_module_with_tariff:,.2f}")
+                    st.write(f"**Price per Module (without tariff):** ${price_per_module_without_tariff:,.2f}")
             
             # Show custom configuration details
             st.subheader("Custom Configuration Details")
@@ -151,6 +168,8 @@ if st.button("Calculate Price"):
                 'kW': [kw_input],
                 'kWh': [kwh_input],
                 'backup_hours': [hours_input],
+                'modules_needed': [price_estimates['modules_needed']],
+                'module_size_kWh': [module_size],
                 'price_with_tariff': [price_estimates['with_tariff']],
                 'price_without_tariff': [price_estimates['without_tariff']],
                 'tariff_amount': [price_estimates['tariff_only']]
@@ -163,20 +182,23 @@ if st.button("Calculate Price"):
 # Add information about the calculation method
 st.sidebar.header("About the Calculator")
 st.sidebar.write("""
-This calculator uses interpolation to estimate prices for custom battery cabinet configurations.
+This calculator estimates prices for custom battery cabinet configurations based on the number of battery modules needed.
 
 **How it works:**
-1. We store data for pre-configured battery models with known prices (both with and without tariffs)
+1. We store data for pre-configured battery models with known prices
 2. When you input custom specifications, the algorithm:
    - First filters by voltage rating
-   - Finds similar pre-configured models
-   - Calculates the price based on the relative position of your configuration
-   - Considers multiple dimensions (kW, kWh, backup hours)
+   - Finds similar pre-configured models with kW ratings above/below your requirements
+   - Calculates the average price per battery module
+   - Determines how many 10.24 kWh modules are needed for your energy requirement
+   - Multiplies the number of modules by the average price per module
    - Calculates prices both with and without tariffs
+
+**Module-Based Calculation:**
+The price is based on standard 10.24 kWh battery modules. The calculator determines how many modules 
+your configuration requires, and multiplies by the average cost per module derived from similar pre-configured models.
 
 **About Tariffs:**
 Tariffs are additional costs applied to battery imports. The calculator provides pricing 
 both with and without tariffs, allowing you to understand the full cost structure.
-
-The more your custom configuration differs from pre-configured models, the less accurate the price estimate may be.
 """)
