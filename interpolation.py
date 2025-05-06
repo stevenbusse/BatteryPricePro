@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import logging
+logging.basicConfig(level=logging.INFO)
+
 
 def interpolate_price(battery_df, voltage, kw, kwh, hours, include_tariff=True, module_size=10.24, tariff_percentage=73.8):
     """

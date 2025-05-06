@@ -1,4 +1,7 @@
 import pandas as pd
+import logging
+logging.basicConfig(level=logging.INFO)
+
 
 def get_battery_data():
     """
