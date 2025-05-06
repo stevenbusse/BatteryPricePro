@@ -4,6 +4,15 @@ import numpy as np
 from interpolation import interpolate_price
 from battery_data import get_battery_data
 
+st.title("Battery Price Pro")
+
+battery_data = get_battery_data()
+
+user_input = st.slider("Select cabinet kWh size", 10, 300, 50)
+
+price = interpolate_prices(battery_data, user_input)
+st.write(f"Estimated price for {user_input} kWh: **${price:,.2f}**")
+
 # Page configuration
 st.set_page_config(
     page_title="Battery Cabinet Pricing Calculator",
