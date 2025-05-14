@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from interpolation import interpolate_price
 from battery_data import get_battery_data
 
 # -----------------------------------
